@@ -26,6 +26,10 @@ if(CONFIG_ESP32_P4_FUNCTION_EV_BOARD)
     list(APPEND BSP_BOARD_SRC "./boards/esp32p4-function-ev")
 endif()
 
+if (CONFIG_XIAO_ESP32S3_SENSE_BOARD)
+    list(APPEND BSP_BOARD_SRC "./boards/xiao-esp32s3-sense")
+endif()
+
 
 idf_component_register(
     SRC_DIRS
