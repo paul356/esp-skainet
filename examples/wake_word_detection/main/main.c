@@ -17,10 +17,12 @@
 #include "esp_board_init.h"
 #include "model_path.h"
 #include "string.h"
+#include "driver/gpio.h"
 
 int detect_flag = 0;
 static esp_afe_sr_iface_t *afe_handle = NULL;
 static volatile int task_flag = 0;
+static volatile int led_on = 0;
 
 void feed_Task(void *arg)
 {
@@ -64,6 +66,16 @@ void detect_Task(void *arg)
             printf("wakeword detected\n");
 	        printf("model index:%d, word index:%d\n", res->wakenet_model_index, res->wake_word_index);
             printf("-----------LISTENING-----------\n");
+            if (led_on)
+            {
+                gpio_set_level(GPIO_NUM_21, 1);
+                led_on = 0;
+            }
+            else
+            {
+                gpio_set_level(GPIO_NUM_21, 0);
+                led_on = 1;
+            }
         }
     }
     if (buff) {
@@ -83,7 +95,11 @@ void app_main()
     afe_handle = esp_afe_handle_from_config(afe_config);
     esp_afe_sr_data_t *afe_data = afe_handle->create_from_config(afe_config);
     afe_config_free(afe_config);
-    
+
+    // set led connected pin to output mode
+    gpio_set_direction(GPIO_NUM_21, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_21, 1);
+
     task_flag = 1;
     xTaskCreatePinnedToCore(&feed_Task, "feed", 8 * 1024, (void*)afe_data, 5, NULL, 0);
     xTaskCreatePinnedToCore(&detect_Task, "detect", 4 * 1024, (void*)afe_data, 5, NULL, 1);
