@@ -19,6 +19,7 @@
 #include "esp_board_init.h"
 #include "speech_commands_action.h"
 #include "model_path.h"
+#include "esp_mn_speech_commands.h"
 
 int detect_flag = 0;
 static esp_afe_sr_iface_t *afe_handle = NULL;
@@ -77,7 +78,12 @@ void detect_Task(void *arg)
     printf("multinet:%s\n", mn_name);
     esp_mn_iface_t *multinet = esp_mn_handle_from_name(mn_name);
     model_iface_data_t *model_data = multinet->create(mn_name, 6000);
-    esp_mn_commands_update_from_sdkconfig(multinet, model_data); // Add speech commands from sdkconfig
+    //esp_mn_commands_update_from_sdkconfig(multinet, model_data); // Add speech commands from sdkconfig
+    esp_mn_commands_clear();                       // 清除当前的命令词列表
+    esp_mn_commands_add(1, "ni hao gao xiao");   // 增加一个命令
+    esp_mn_commands_add(2, "yan gui zheng zhuan");  // 增加一个命令
+    esp_mn_commands_update();
+
     int mu_chunksize = multinet->get_samp_chunksize(model_data);
     assert(mu_chunksize == afe_chunksize);
 
@@ -103,8 +109,8 @@ void detect_Task(void *arg)
 #elif CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4
         if (res->wakeup_state == WAKENET_DETECTED) {
             printf("WAKEWORD DETECTED\n");
-	    multinet->clean(model_data);  // clean all status of multinet
-        } else if (res->wakeup_state == WAKENET_CHANNEL_VERIFIED) {
+            multinet->clean(model_data);  // clean all status of multinet
+        //} else if (res->wakeup_state == WAKENET_CHANNEL_VERIFIED) {
             play_voice = -1;
             detect_flag = 1;
             printf("AFE_FETCH_CHANNEL_VERIFIED, channel index: %d\n", res->trigger_channel_id);

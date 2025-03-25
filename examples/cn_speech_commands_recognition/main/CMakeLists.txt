@@ -1,6 +1,6 @@
 set(srcs
     main.c
-    speech_commands_action.c
+    #speech_commands_action.c
     )
 
 set(requires
