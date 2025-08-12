@@ -2,6 +2,7 @@
 #include "esp_vfs_fat.h"
 #include "esp_log.h"
 #include "driver/i2s_pdm.h"
+#include "driver/i2s_std.h"
 #include "driver/spi_common.h"
 #include "sdmmc_cmd.h"
 
@@ -11,6 +12,7 @@
 sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 sdmmc_card_t *card;
 i2s_chan_handle_t rx_handle = NULL;
+i2s_chan_handle_t tx_handle = NULL;
 
 // Deinit SD card
 esp_err_t bsp_sdcard_deinit(char *mount_point)
@@ -93,14 +95,60 @@ esp_err_t bsp_board_init(uint32_t sample_rate, int channel_format, int bits_per_
     ESP_ERROR_CHECK(i2s_channel_init_pdm_rx_mode(rx_handle, &pdm_rx_cfg));
     ESP_ERROR_CHECK(i2s_channel_enable(rx_handle));
 
+    gpio_config_t power_gpio_config = {
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = (1ULL << CONFIG_EXAMPLE_I2S_SD_GPIO) | (1ULL << CONFIG_EXAMPLE_I2S_GAIN_GPIO)
+    };
+    ESP_ERROR_CHECK(gpio_config(&power_gpio_config));
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_I2S_SD_GPIO, 0));
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_I2S_GAIN_GPIO, 1));
+
+    i2s_chan_config_t chan_cfg_tx = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg_tx, &tx_handle, NULL));
+    i2s_std_config_t std_tx_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate),
+        /* Configure for mono output - MAX98357 expects mono signal */
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(bits_per_chan, I2S_SLOT_MODE_MONO),
+        .gpio_cfg = {
+            .mclk = CONFIG_EXAMPLE_I2S_MCLK_GPIO,  // -1, MAX98357 doesn't need MCLK
+            .bclk = CONFIG_EXAMPLE_I2S_BCLK_GPIO,
+            .ws = CONFIG_EXAMPLE_I2S_LRCLK_GPIO,
+            .dout = CONFIG_EXAMPLE_I2S_DOUT_GPIO,
+            .din  = -1,  // TX only, no input
+            .invert_flags = {
+                .mclk_inv = false,
+                .bclk_inv = false,
+                .ws_inv = false
+            },
+        },
+    };
+    ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle, &std_tx_cfg));
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_handle));
+
     return ESP_OK;
 }
 
 // Play audio
 esp_err_t bsp_audio_play(const int16_t* data, int length, TickType_t ticks_to_wait)
 {
-    // TODO: Implement function
-    return ESP_FAIL;
+    if (tx_handle == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_I2S_SD_GPIO, 1));
+    size_t bytes_written = 0;
+    esp_err_t ret = i2s_channel_write(tx_handle, data, length, &bytes_written, ticks_to_wait);
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_I2S_SD_GPIO, 0));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write data to I2S TX channel: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    if (bytes_written != length) {
+        ESP_LOGW(TAG, "I2S write incomplete: %d/%d bytes written", bytes_written, length);
+    }
+    
+    return ESP_OK;
 }
 
 // Get the record pcm data

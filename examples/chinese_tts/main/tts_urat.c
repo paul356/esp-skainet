@@ -13,6 +13,7 @@
 #include "driver/uart.h"
 #include "soc/uart_periph.h"
 #include "esp_idf_version.h"
+#include "esp_vfs_dev.h"
 
 #define TAG "TTS_URAT"
 extern ringbuf_handle_t urat_rb;
